@@ -51,6 +51,7 @@ enum class OperatorType {
   UnionPositions,
   Update,
   Validate,
+  WindowFunction,
   Mock  // for Tests that need to Mock operators
 };
 
