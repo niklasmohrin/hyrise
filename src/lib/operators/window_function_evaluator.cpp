@@ -125,6 +125,8 @@ std::shared_ptr<const Table> WindowFunctionEvaluator::_on_execute() {
             return _templated_on_execute<InputColumnType, WindowFunction::Min>();
           case WindowFunction::Max:
             return _templated_on_execute<InputColumnType, WindowFunction::Max>();
+          case WindowFunction::Count:
+            return _templated_on_execute<InputColumnType, WindowFunction::Count>();
           default:
             Fail("Unsupported window function.");
         }
@@ -337,23 +339,45 @@ template <typename InputColumnType, WindowFunction window_function>
 void WindowFunctionEvaluator::compute_window_function_one_pass(const HashPartitionedData& partitioned_data,
                                                                auto&& emit_computed_value) const {
   if constexpr (SupportsOnePass<InputColumnType, window_function>) {
+    using Traits = WindowFunctionCombinator<InputColumnType, window_function>;
+    using State = typename Traits::OnePassState;
+
     spawn_and_wait_per_hash(partitioned_data, [&emit_computed_value](const auto& hash_partition) {
-      using Traits = WindowFunctionCombinator<InputColumnType, window_function>;
-      using State = typename Traits::OnePassState;
-      auto state = State{};
+      if constexpr (needs_partition_bounds_for_one_pass(window_function)) {
+        for_each_partition(hash_partition, [&](uint64_t partition_start, uint64_t partition_end) {
+          auto state = State{};
 
-      const RelevantRowInformation* previous_row = nullptr;
+          const RelevantRowInformation* previous_row = nullptr;
 
-      for (const auto& row : hash_partition) {
-        if (previous_row) {
-          if (std::is_neq(RelevantRowInformation::compare_with_null_equal(previous_row->partition_values,
-                                                                          row.partition_values)))
-            state = State{};
-          else
-            state.update(*previous_row, row);
+          for (auto row_number = partition_start; row_number < partition_end; ++row_number) {
+            const auto& row = hash_partition[row_number];
+            if (previous_row) {
+              if (std::is_neq(RelevantRowInformation::compare_with_null_equal(previous_row->partition_values,
+                                                                              row.partition_values)))
+                state = State{};
+              else
+                state.update(*previous_row, row, partition_start, partition_end);
+            }
+            emit_computed_value(row.row_id, state.current_value());
+            previous_row = &row;
+          }
+        });
+      } else {
+        auto state = State{};
+
+        const RelevantRowInformation* previous_row = nullptr;
+
+        for (const auto& row : hash_partition) {
+          if (previous_row) {
+            if (std::is_neq(RelevantRowInformation::compare_with_null_equal(previous_row->partition_values,
+                                                                            row.partition_values)))
+              state = State{};
+            else
+              state.update(*previous_row, row);
+          }
+          emit_computed_value(row.row_id, state.current_value());
+          previous_row = &row;
         }
-        emit_computed_value(row.row_id, state.current_value());
-        previous_row = &row;
       }
     });
   } else {

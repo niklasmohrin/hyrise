@@ -29,6 +29,10 @@ template <typename T, WindowFunction window_function>
 concept UseSegmentTree = std::is_arithmetic_v<T> && std::ranges::find(segment_tree_window_functions, window_function) !=
 segment_tree_window_functions.end();
 
+constexpr bool needs_partition_bounds_for_one_pass(WindowFunction window_function) {
+  return window_function == WindowFunction::Count || window_function == WindowFunction::PercentRank;
+}
+
 template <typename T, WindowFunction window_function>
 struct WindowFunctionCombinator {};
 
@@ -88,6 +92,25 @@ struct WindowFunctionCombinator<T, WindowFunction::RowNumber> {
     void update([[maybe_unused]] const WindowFunctionEvaluator::RelevantRowInformation& previous_value,
                 [[maybe_unused]] const WindowFunctionEvaluator::RelevantRowInformation& current_value) {
       ++row_number;
+    }
+  };
+};
+
+template <typename T>
+struct WindowFunctionCombinator<T, WindowFunction::Count> {
+  using ReturnType = typename WindowFunctionTraits<T, WindowFunction::Count>::ReturnType;
+
+  struct OnePassState {
+    uint64_t size = 0;
+
+    ReturnType current_value() const {
+      return size;
+    }
+
+    void update([[maybe_unused]] const WindowFunctionEvaluator::RelevantRowInformation& previous_value,
+                [[maybe_unused]] const WindowFunctionEvaluator::RelevantRowInformation& current_value,
+                uint64_t partition_start, uint64_t partition_end) {
+      size = partition_end - partition_start;
     }
   };
 };
