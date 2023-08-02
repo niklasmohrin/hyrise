@@ -13,7 +13,7 @@ class SmallMinHeap {
  public:
   template <typename R>
     requires std::ranges::input_range<R> && std::ranges::sized_range<R>
-  explicit SmallMinHeap(R&& initial_elements, Compare&& init_compare = {}) : _compare(std::move(init_compare)) {
+  explicit SmallMinHeap(R&& initial_elements, Compare init_compare = {}) : _compare(std::move(init_compare)) {
     const auto size = std::ranges::size(initial_elements);
     Assert(size <= max_size, "SmallMinHeap got more than max_size initial elements");
     _size = static_cast<uint8_t>(size);
@@ -21,8 +21,14 @@ class SmallMinHeap {
     std::ranges::sort(std::span(_elements).subspan(0, _size), _compare);
   }
 
+  explicit SmallMinHeap(Compare init_compare = {}) : SmallMinHeap(std::array<T, 0>{}, std::move(init_compare)) {}
+
   uint8_t size() const {
     return _size;
+  }
+
+  bool empty() const {
+    return size() == 0;
   }
 
   void push(T element) {

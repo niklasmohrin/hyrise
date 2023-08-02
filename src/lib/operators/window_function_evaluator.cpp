@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <ranges>
 #include <type_traits>
 #include <utility>
 
@@ -16,6 +17,7 @@
 #include "utils/assert.hpp"
 #include "utils/format_duration.hpp"
 #include "utils/segment_tree.hpp"
+#include "utils/small_min_heap.hpp"
 #include "utils/timer.hpp"
 #include "window_function_evaluator.hpp"
 
@@ -251,8 +253,59 @@ HashPartitionedData collect_chunk_into_buckets(ChunkID chunk_id, const Chunk& ch
   return result;
 }
 
+template <typename T, uint8_t sublist_count>
+void multiway_inplace_merge(const std::span<T> data, auto comparator) {
+  const auto sublist_size = data.size() / sublist_count;
+
+  DebugAssert(sublist_size > 0, "Why are you even merging?");
+
+  const auto scratch_size = (sublist_count - 1) * sublist_size;
+  auto scratch =
+      std::vector(std::make_move_iterator(data.begin()), std::make_move_iterator(data.begin() + scratch_size));
+
+  auto sublists = std::array<std::span<T>, sublist_count>{};
+  for (auto i = 0; i < sublist_count - 1; ++i)
+    sublists[i] = std::span(scratch).subspan(i * sublist_size, sublist_size);
+  sublists[sublist_count - 1] = std::span(data).subspan(scratch_size);
+
+  const auto sublist_compare = [&](auto lhs, auto rhs) {
+    DebugAssert(!sublists[lhs].empty(), "lhs empty");
+    DebugAssert(!sublists[rhs].empty(), "rhs empty");
+    DebugAssert(!sublists[lhs].front().partition_values.empty(), "lhs p values empty");
+    DebugAssert(!sublists[rhs].front().partition_values.empty(), "rhs p values empty");
+    return comparator(sublists[lhs].front(), sublists[rhs].front());
+  };
+
+  auto heap = SmallMinHeap<sublist_count, uint8_t, decltype(sublist_compare)>(sublist_compare);
+  for (auto i = static_cast<uint8_t>(0); i < sublist_count; ++i)
+    heap.push(i);
+
+  auto output_iterator = data.begin();
+  while (heap.size() > 1) {
+    const auto list_index = heap.pop();
+    auto& list = sublists[list_index];
+    DebugAssert(!list.front().partition_values.empty(), "about to write a bad value");
+    *output_iterator++ = std::move(list.front());
+    list = list.subspan(1);
+    if (!list.empty())
+      heap.push(list_index);
+  }
+
+  if (!heap.empty()) {
+    const auto list_index = heap.pop();
+    if (list_index < sublist_count - 1) {
+      std::ranges::move(sublists[list_index], output_iterator);
+    }
+  } else {
+    DebugAssert(output_iterator == data.end(), "Somehow we lost (or gained) some data while merging");
+  }
+}
+
+template <uint8_t fan_out = 2>
 void parallel_merge_sort(std::span<RelevantRowInformation> data, auto comparator) {
-  const auto base_size = 1u << 17u;
+  static_assert(fan_out >= 2);
+
+  const auto base_size = 3;
 
   if (data.size() <= base_size) {
     // NOTE: The "stable" is needed for tests (against sqlite) to pass, but I think that it is not actually required by
@@ -261,16 +314,21 @@ void parallel_merge_sort(std::span<RelevantRowInformation> data, auto comparator
     return;
   }
 
-  const auto mid = data.size() / 2;
-  const auto left = data.subspan(0, mid);
-  const auto right = data.subspan(mid);
+  const auto sublist_size = data.size() / fan_out;
 
-  auto tasks = std::vector<std::shared_ptr<AbstractTask>>{
-      std::make_shared<JobTask>([left, &comparator]() { parallel_merge_sort(left, comparator); }),
-      std::make_shared<JobTask>([right, &comparator]() { parallel_merge_sort(right, comparator); })};
+  auto tasks = std::vector<std::shared_ptr<AbstractTask>>(fan_out, nullptr);
+  for (auto i = 0; i < fan_out; ++i) {
+    tasks[i] = std::make_shared<JobTask>([data, i, sublist_size, &comparator]() {
+      const auto start = i * sublist_size;
+      const auto sublist = i < fan_out - 1 ? data.subspan(start, start + sublist_size) : data.subspan(start);
+      parallel_merge_sort(sublist, comparator);
+    });
+  }
+
   Hyrise::get().scheduler()->schedule_and_wait_for_tasks(tasks);
 
-  std::ranges::inplace_merge(data, data.begin() + static_cast<ssize_t>(mid), comparator);
+  // std::ranges::inplace_merge(data, data.begin() + static_cast<ssize_t>(mid), comparator);
+  multiway_inplace_merge<RelevantRowInformation, fan_out>(data, comparator);
 }
 
 };  // namespace
