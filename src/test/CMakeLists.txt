@@ -240,6 +240,7 @@ set(
     lib/utils/plugin_test_utils.hpp
     lib/utils/print_utils_test.cpp
     lib/utils/segment_tree_test.cpp
+    lib/utils/small_min_heap_test.cpp
     lib/utils/setting_test.cpp
     lib/utils/settings_manager_test.cpp
     lib/utils/singleton_test.cpp
