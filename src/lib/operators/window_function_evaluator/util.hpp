@@ -5,6 +5,8 @@
 #include <span>     // NOLINT(build/include_order)
 #include <vector>
 
+#include "boost/container/small_vector.hpp"
+
 #include "all_type_variant.hpp"
 #include "hyrise.hpp"
 #include "scheduler/abstract_task.hpp"
@@ -32,8 +34,10 @@ std::weak_ordering compare_with_null_equal(std::span<const AllTypeVariant> lhs, 
 }
 
 struct RelevantRowInformation {
-  std::vector<AllTypeVariant> partition_values;
-  std::vector<AllTypeVariant> order_values;
+  using Vector = boost::container::small_vector<AllTypeVariant, 4>;
+
+  Vector partition_values;
+  Vector order_values;
   AllTypeVariant function_argument;
   RowID row_id;
 

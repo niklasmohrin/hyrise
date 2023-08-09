@@ -1,3 +1,5 @@
+#include "window_function_evaluator.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
@@ -17,7 +19,6 @@
 #include "utils/format_duration.hpp"
 #include "utils/segment_tree.hpp"
 #include "utils/timer.hpp"
-#include "window_function_evaluator.hpp"
 
 namespace hyrise::window_function_evaluator {
 
@@ -212,7 +213,7 @@ HashPartitionedData collect_chunk_into_buckets(ChunkID chunk_id, const Chunk& ch
   const auto chunk_size = chunk.size();
 
   const auto collect_values_of_columns = [&chunk, chunk_size](std::span<const ColumnID> column_ids) {
-    auto values = std::vector(chunk_size, std::vector(column_ids.size(), NULL_VALUE));
+    auto values = std::vector(chunk_size, RelevantRowInformation::Vector(column_ids.size(), NULL_VALUE));
     for (auto column_id_index = 0u; column_id_index < column_ids.size(); ++column_id_index) {
       const auto segment = chunk.get_segment(column_ids[column_id_index]);
       segment_iterate(*segment, [&](const auto& position) {
