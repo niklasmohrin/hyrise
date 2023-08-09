@@ -41,6 +41,14 @@ struct RelevantRowInformation {
   AllTypeVariant function_argument;
   RowID row_id;
 
+  std::span<const AllTypeVariant> partition_values_span() const {
+    return {partition_values.data(), partition_values.size()};
+  }
+
+  std::span<const AllTypeVariant> order_values_span() const {
+    return {order_values.data(), order_values.size()};
+  }
+
   bool is_peer_of(const RelevantRowInformation& other) const;
 };
 
@@ -88,12 +96,12 @@ void for_each_partition(std::span<const RelevantRowInformation> hash_partition, 
 
   while (partition_start < hash_partition.size()) {
     const auto partition_end = std::distance(
-        hash_partition.begin(),
-        std::find_if(hash_partition.begin() + static_cast<ssize_t>(partition_start) + 1, hash_partition.end(),
-                     [&](const auto& next_element) {
-                       return std::is_neq(compare_with_null_equal(hash_partition[partition_start].partition_values,
-                                                                  next_element.partition_values));
-                     }));
+        hash_partition.begin(), std::find_if(hash_partition.begin() + static_cast<ssize_t>(partition_start) + 1,
+                                             hash_partition.end(), [&](const auto& next_element) {
+                                               return std::is_neq(compare_with_null_equal(
+                                                   hash_partition[partition_start].partition_values_span(),
+                                                   next_element.partition_values_span()));
+                                             }));
     emit_partition_bounds(partition_start, partition_end);
     partition_start = partition_end;
   }

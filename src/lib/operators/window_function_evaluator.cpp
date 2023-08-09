@@ -330,10 +330,10 @@ void WindowFunctionEvaluator::partition_and_order(HashPartitionedData& buckets) 
   };
 
   const auto comparator = [&is_column_reversed](const RelevantRowInformation& lhs, const RelevantRowInformation& rhs) {
-    const auto comp_result = compare_with_null_equal(lhs.partition_values, rhs.partition_values);
+    const auto comp_result = compare_with_null_equal(lhs.partition_values_span(), rhs.partition_values_span());
     if (std::is_neq(comp_result))
       return std::is_lt(comp_result);
-    return std::is_lt(compare_with_null_equal(lhs.order_values, rhs.order_values, is_column_reversed));
+    return std::is_lt(compare_with_null_equal(lhs.order_values_span(), rhs.order_values_span(), is_column_reversed));
   };
 
   spawn_and_wait_per_hash(buckets, [&comparator](auto& bucket) { parallel_merge_sort(bucket, comparator); });
@@ -352,7 +352,8 @@ void WindowFunctionEvaluator::compute_window_function_one_pass(const HashPartiti
     const RelevantRowInformation* previous_row = nullptr;
 
     for (const auto& row : hash_partition) {
-      if (previous_row && std::is_eq(compare_with_null_equal(previous_row->partition_values, row.partition_values))) {
+      if (previous_row &&
+          std::is_eq(compare_with_null_equal(previous_row->partition_values_span(), row.partition_values_span()))) {
         Impl::update_state(state, row);
       } else {
         state = Impl::initial_state(row);

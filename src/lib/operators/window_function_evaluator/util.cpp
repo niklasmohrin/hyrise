@@ -29,7 +29,7 @@ std::weak_ordering compare_with_null_equal(std::span<const AllTypeVariant> lhs, 
 }
 
 bool RelevantRowInformation::is_peer_of(const RelevantRowInformation& other) const {
-  return std::is_eq(compare_with_null_equal(order_values, other.order_values));
+  return std::is_eq(compare_with_null_equal(order_values_span(), other.order_values_span()));
 }
 
 }  // namespace hyrise::window_function_evaluator
