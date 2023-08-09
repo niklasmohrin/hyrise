@@ -300,7 +300,7 @@ void multiway_inplace_merge(const std::span<T> data, const std::span<T> scratch,
   }
 }
 
-template <typename T, uint8_t fan_out = 2>
+template <typename T, uint8_t fan_out>
 void parallel_merge_sort(const std::span<T> data, const std::span<T> scratch, auto comparator) {
   static_assert(fan_out >= 2);
 
@@ -321,7 +321,7 @@ void parallel_merge_sort(const std::span<T> data, const std::span<T> scratch, au
     tasks[i] = std::make_shared<JobTask>([data, scratch, i, sublist_size, &comparator]() {
       const auto start = i * sublist_size;
       const auto size = i + 1 < fan_out ? sublist_size : data.size() - (fan_out - 1) * sublist_size;
-      parallel_merge_sort(data.subspan(start, size), scratch.subspan(start, size), comparator);
+      parallel_merge_sort<T, fan_out>(data.subspan(start, size), scratch.subspan(start, size), comparator);
     });
   }
 
