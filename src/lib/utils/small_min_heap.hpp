@@ -35,8 +35,8 @@ class SmallMinHeap {
     DebugAssert(size() < max_size, "Pushed into already full SmallMinHeap");
 
     const auto insertion_point =
-        std::ranges::find_if(_elements.begin(), _elements.begin() + _size,
-                             [&](const auto& contained) { return _compare(element, contained); });
+        std::ranges::partition_point(_elements.begin(), _elements.begin() + _size,
+                                     [&](const auto& contained) { return !_compare(element, contained); });
     std::ranges::move_backward(insertion_point, _elements.begin() + _size, _elements.begin() + _size + 1);
     *insertion_point = std::move(element);
     ++_size;
