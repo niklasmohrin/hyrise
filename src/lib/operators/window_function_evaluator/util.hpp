@@ -19,9 +19,6 @@ std::weak_ordering compare_with_null_equal(std::span<const AllTypeVariant> lhs, 
 
 std::weak_ordering compare_with_null_equal(std::span<const AllTypeVariant> lhs, std::span<const AllTypeVariant> rhs,
                                            auto is_column_reversed) {
-  if (lhs.size() != rhs.size()) {
-    std::cerr << "Fuck\n";
-  }
   DebugAssert(lhs.size() == rhs.size(), "Tried to compare rows with different column counts: " +
                                             std::to_string(lhs.size()) + " and " + std::to_string(rhs.size()));
 

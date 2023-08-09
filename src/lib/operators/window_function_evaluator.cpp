@@ -270,8 +270,6 @@ void multiway_inplace_merge(const std::span<T> data, const std::span<T> scratch,
   const auto sublist_compare = [&](auto lhs, auto rhs) {
     DebugAssert(!sublists[lhs].empty(), "lhs empty");
     DebugAssert(!sublists[rhs].empty(), "rhs empty");
-    DebugAssert(!sublists[lhs].front().partition_values.empty(), "lhs p values empty");
-    DebugAssert(!sublists[rhs].front().partition_values.empty(), "rhs p values empty");
     const auto value_ordering = comparator(sublists[lhs].front(), sublists[rhs].front());
     if (std::is_eq(value_ordering))
       return lhs < rhs;
@@ -286,7 +284,6 @@ void multiway_inplace_merge(const std::span<T> data, const std::span<T> scratch,
   while (heap.size() > 1) {
     const auto list_index = heap.pop();
     auto& list = sublists[list_index];
-    DebugAssert(!list.front().partition_values.empty(), "about to write a bad value");
     *output_iterator++ = std::move(list.front());
     list = list.subspan(1);
     if (!list.empty())
