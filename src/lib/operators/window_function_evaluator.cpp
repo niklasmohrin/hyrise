@@ -304,7 +304,7 @@ template <typename T, uint8_t fan_out = 2>
 void parallel_merge_sort(const std::span<T> data, const std::span<T> scratch, auto comparator) {
   static_assert(fan_out >= 2);
 
-  const auto base_size = 3;
+  const auto base_size = 1u << 17u;
 
   if (data.size() <= base_size) {
     // NOTE: The "stable" is needed for tests (against sqlite) to pass, but I think that it is not actually required by
