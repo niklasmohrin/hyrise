@@ -254,26 +254,28 @@ HashPartitionedData collect_chunk_into_buckets(ChunkID chunk_id, const Chunk& ch
 }
 
 template <typename T, uint8_t sublist_count>
-void multiway_inplace_merge(const std::span<T> data, auto comparator) {
+void multiway_inplace_merge(const std::span<T> data, const std::span<T> scratch, auto comparator) {
   const auto sublist_size = data.size() / sublist_count;
 
   DebugAssert(sublist_size > 0, "Why are you even merging?");
 
-  const auto scratch_size = (sublist_count - 1) * sublist_size;
-  auto scratch =
-      std::vector(std::make_move_iterator(data.begin()), std::make_move_iterator(data.begin() + scratch_size));
+  const auto end_of_scratch_data = (sublist_count - 1) * sublist_size;
+  std::ranges::move(data.subspan(0, end_of_scratch_data), scratch.begin());
 
   auto sublists = std::array<std::span<T>, sublist_count>{};
   for (auto i = 0; i < sublist_count - 1; ++i)
-    sublists[i] = std::span(scratch).subspan(i * sublist_size, sublist_size);
-  sublists[sublist_count - 1] = std::span(data).subspan(scratch_size);
+    sublists[i] = scratch.subspan(i * sublist_size, sublist_size);
+  sublists[sublist_count - 1] = data.subspan(end_of_scratch_data);
 
   const auto sublist_compare = [&](auto lhs, auto rhs) {
     DebugAssert(!sublists[lhs].empty(), "lhs empty");
     DebugAssert(!sublists[rhs].empty(), "rhs empty");
     DebugAssert(!sublists[lhs].front().partition_values.empty(), "lhs p values empty");
     DebugAssert(!sublists[rhs].front().partition_values.empty(), "rhs p values empty");
-    return comparator(sublists[lhs].front(), sublists[rhs].front());
+    const auto value_ordering = comparator(sublists[lhs].front(), sublists[rhs].front());
+    if (std::is_eq(value_ordering))
+      return lhs < rhs;
+    return std::is_lt(value_ordering);
   };
 
   auto heap = SmallMinHeap<sublist_count, uint8_t, decltype(sublist_compare)>(sublist_compare);
@@ -301,8 +303,8 @@ void multiway_inplace_merge(const std::span<T> data, auto comparator) {
   }
 }
 
-template <uint8_t fan_out = 2>
-void parallel_merge_sort(std::span<RelevantRowInformation> data, auto comparator) {
+template <typename T, uint8_t fan_out = 2>
+void parallel_merge_sort(const std::span<T> data, const std::span<T> scratch, auto comparator) {
   static_assert(fan_out >= 2);
 
   const auto base_size = 3;
@@ -310,7 +312,8 @@ void parallel_merge_sort(std::span<RelevantRowInformation> data, auto comparator
   if (data.size() <= base_size) {
     // NOTE: The "stable" is needed for tests (against sqlite) to pass, but I think that it is not actually required by
     //       the specification.
-    std::ranges::stable_sort(data, comparator);
+    std::ranges::stable_sort(
+        data, [&comparator](const auto& lhs, const auto& rhs) { return std::is_lt(comparator(lhs, rhs)); });
     return;
   }
 
@@ -318,17 +321,22 @@ void parallel_merge_sort(std::span<RelevantRowInformation> data, auto comparator
 
   auto tasks = std::vector<std::shared_ptr<AbstractTask>>(fan_out, nullptr);
   for (auto i = 0; i < fan_out; ++i) {
-    tasks[i] = std::make_shared<JobTask>([data, i, sublist_size, &comparator]() {
+    tasks[i] = std::make_shared<JobTask>([data, scratch, i, sublist_size, &comparator]() {
       const auto start = i * sublist_size;
-      const auto sublist = i < fan_out - 1 ? data.subspan(start, start + sublist_size) : data.subspan(start);
-      parallel_merge_sort(sublist, comparator);
+      const auto size = i + 1 < fan_out ? sublist_size : data.size() - (fan_out - 1) * sublist_size;
+      parallel_merge_sort(data.subspan(start, size), scratch.subspan(start, size), comparator);
     });
   }
 
   Hyrise::get().scheduler()->schedule_and_wait_for_tasks(tasks);
 
-  // std::ranges::inplace_merge(data, data.begin() + static_cast<ssize_t>(mid), comparator);
-  multiway_inplace_merge<RelevantRowInformation, fan_out>(data, comparator);
+  multiway_inplace_merge<RelevantRowInformation, fan_out>(data, scratch, comparator);
+}
+
+template <typename T, uint8_t fan_out = 2>
+void parallel_merge_sort(const std::span<T> data, auto comparator) {
+  auto scratch = std::vector<T>(data.size());
+  parallel_merge_sort<T, fan_out>(data, scratch, comparator);
 }
 
 };  // namespace
@@ -387,13 +395,14 @@ void WindowFunctionEvaluator::partition_and_order(HashPartitionedData& buckets) 
   };
 
   const auto comparator = [&is_column_reversed](const RelevantRowInformation& lhs, const RelevantRowInformation& rhs) {
-    const auto comp_result = compare_with_null_equal(lhs.partition_values, rhs.partition_values);
-    if (std::is_neq(comp_result))
-      return std::is_lt(comp_result);
-    return std::is_lt(compare_with_null_equal(lhs.order_values, rhs.order_values, is_column_reversed));
+    const auto partition_ordering = compare_with_null_equal(lhs.partition_values, rhs.partition_values);
+    if (std::is_eq(partition_ordering))
+      return compare_with_null_equal(lhs.order_values, rhs.order_values, is_column_reversed);
+    return partition_ordering;
   };
 
-  spawn_and_wait_per_hash(buckets, [&comparator](auto& bucket) { parallel_merge_sort(bucket, comparator); });
+  spawn_and_wait_per_hash(
+      buckets, [&comparator](auto& bucket) { parallel_merge_sort<RelevantRowInformation, 4>(bucket, comparator); });
 }
 
 template <typename InputColumnType, WindowFunction window_function>
