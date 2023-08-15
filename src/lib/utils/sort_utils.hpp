@@ -5,21 +5,16 @@
 #include <cstdint>
 #include <ranges>
 #include <span>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "assert.hpp"
+#include "comparator_concepts.hpp"
 #include "hyrise.hpp"
 #include "scheduler/job_task.hpp"
 #include "small_min_heap.hpp"
 
 namespace hyrise {
-
-template <typename Comparator, typename T>
-concept ThreeWayComparator = requires(Comparator comparator, const T& lhs, const T& rhs) {
-                               { comparator(lhs, rhs) } -> std::convertible_to<std::partial_ordering>;
-                             };
 
 namespace parallel_merge_sort_impl {
 

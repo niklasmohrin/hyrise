@@ -598,6 +598,7 @@ set(
     utils/chunk_pruning_utils.hpp
     utils/column_pruning_utils.cpp
     utils/column_pruning_utils.hpp
+    utils/comparator_concepts.hpp
     utils/copyable_atomic.hpp
     utils/date_time_utils.cpp
     utils/date_time_utils.hpp

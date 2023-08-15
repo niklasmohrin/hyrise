@@ -5,13 +5,9 @@
 #include <ranges>
 
 #include "assert.hpp"
+#include "comparator_concepts.hpp"
 
 namespace hyrise {
-
-template <typename Comparator, typename T>
-concept BooleanComparator = requires(Comparator comparator, const T& lhs, const T& rhs) {
-                              { comparator(lhs, rhs) } -> std::same_as<bool>;
-                            };
 
 template <uint8_t max_size, typename T, BooleanComparator<T> Compare = std::less<T>>
 class SmallMinHeap {
