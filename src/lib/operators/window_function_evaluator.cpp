@@ -327,7 +327,7 @@ void parallel_merge_sort(const std::span<T> data, const std::span<T> scratch, au
 
   Hyrise::get().scheduler()->schedule_and_wait_for_tasks(tasks);
 
-  multiway_inplace_merge<RelevantRowInformation, fan_out>(data, scratch, comparator);
+  multiway_inplace_merge<T, fan_out>(data, scratch, comparator);
 }
 
 template <typename T, uint8_t fan_out = 2>
