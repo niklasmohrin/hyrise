@@ -316,7 +316,7 @@ void WindowFunctionEvaluator::partition_and_order(HashPartitionedData& buckets) 
   };
 
   spawn_and_wait_per_hash(
-      buckets, [&comparator](auto& bucket) { parallel_merge_sort<RelevantRowInformation, 4>(bucket, comparator); });
+      buckets, [&comparator](auto& bucket) { parallel_inplace_merge_sort<RelevantRowInformation, 4>(bucket, comparator); });
 }
 
 template <typename InputColumnType, WindowFunction window_function>
