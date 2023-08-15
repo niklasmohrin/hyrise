@@ -18,6 +18,10 @@ namespace hyrise {
 
 namespace parallel_merge_sort_impl {
 
+// Merges the (evenly spaced, `sublist_count` many) sorted sublists of `input` into one sorted list in the `output`
+// buffer. To provide a stable merge, a three-way comparator needs to be provided, so that in case of equal elements,
+// the list index is used. As `sublist_count` is expected to be small, a `SmallMinHeap` is used instead of a
+// `std::priority_queue`.
 template <typename T, uint8_t sublist_count>
 void multiway_merge_into(const std::span<T> input, const std::span<T> output, ThreeWayComparator<T> auto comparator) {
   const auto sublist_size = input.size() / sublist_count;
@@ -74,6 +78,13 @@ enum class OutputMode {
   InScratch,
 };
 
+// The main function of the parallel multiway merge sort. The data from `input` is divided into `fan_out` evenly spaced
+// sublists that are sorted recursively and then merged using the function above. If the input contains at most
+// `base_size` many elements, the recursion stops and a sorting algorithm from the standard library is used. To reduce
+// the number of allocations for merging, there is some scratch space that is kept throughout the entire sorting and
+// reused in the recursive calls. To allow the merging step to only move every value once, the recursive steps need to
+// alternate between moving the data from `input` to `scratch` and keeping it in `input` (that is, moving the
+// recursively sorted data from `scratch` back into `input`).
 template <typename T, uint8_t fan_out, size_t base_size, OutputMode output_mode>
 void sort(const std::span<T> input, const std::span<T> scratch, ThreeWayComparator<T> auto comparator) {
   // Otherwise, we recurse indefinitely.
@@ -100,6 +111,7 @@ void sort(const std::span<T> input, const std::span<T> scratch, ThreeWayComparat
   for (auto i = 0; i < fan_out; ++i) {
     tasks[i] = std::make_shared<JobTask>([input, scratch, i, sublist_size, &comparator]() {
       const auto start = i * sublist_size;
+      // The last sublist does not use the rounded-down size.
       const auto size = i + 1 < fan_out ? sublist_size : input.size() - (fan_out - 1) * sublist_size;
 
       constexpr auto other_output_mode =
@@ -121,6 +133,10 @@ void sort(const std::span<T> input, const std::span<T> scratch, ThreeWayComparat
 
 }  // namespace parallel_merge_sort_impl
 
+// Stable-sorts `data` in-place (using one extra allocation of scratch space) according to `comparator`.
+//
+// If `data` contains at most `base_size` many elements, a sorting algorithm from the standard library is used,
+// otherwise `fan_out` many sublists are sorted recursively and merged.
 template <typename T, uint8_t fan_out = 2, size_t base_size = 1u << 10u>
 void parallel_inplace_merge_sort(const std::span<T> data, ThreeWayComparator<T> auto comparator) {
   using namespace parallel_merge_sort_impl;
