@@ -22,7 +22,7 @@ template <typename T, uint8_t sublist_count>
 void multiway_merge_into(const std::span<T> input, const std::span<T> output, ThreeWayComparator<T> auto comparator) {
   const auto sublist_size = input.size() / sublist_count;
 
-  DebugAssert(sublist_size > 0, "Why are you even merging?");
+  DebugAssert(sublist_size > 0, "Tried to merge too small lists (at most one is non-empty).");
 
   auto sublists = std::array<std::span<T>, sublist_count>{};
   for (auto i = 0; i < sublist_count - 1; ++i) {
@@ -32,11 +32,13 @@ void multiway_merge_into(const std::span<T> input, const std::span<T> output, Th
   sublists[sublist_count - 1] = input.subspan(last_sublist_start);
 
   const auto sublist_compare = [&](auto lhs, auto rhs) {
-    DebugAssert(!sublists[lhs].empty(), "lhs empty");
-    DebugAssert(!sublists[rhs].empty(), "rhs empty");
+    DebugAssert(!sublists[lhs].empty(), "Sublist of lhs is empty.");
+    DebugAssert(!sublists[rhs].empty(), "Sublist of rhs is empty.");
     const auto value_ordering = comparator(sublists[lhs].front(), sublists[rhs].front());
-    if (std::is_eq(value_ordering))
+    if (std::is_eq(value_ordering)) {
+      // Break ties by sorting smaller index first - this is important for stability.
       return lhs < rhs;
+    }
     return std::is_lt(value_ordering);
   };
 
@@ -59,9 +61,11 @@ void multiway_merge_into(const std::span<T> input, const std::span<T> output, Th
 
   if (!heap.empty()) {
     const auto list_index = heap.pop();
+    DebugAssert(static_cast<ssize_t>(sublists[list_index].size()) == std::distance(output_iterator, output.end()),
+                "Final list size does not match output iterator position.");
     std::ranges::move(sublists[list_index], output_iterator);
   } else {
-    DebugAssert(output_iterator == output.end(), "Somehow we lost (or gained) some data while merging");
+    DebugAssert(output_iterator == output.end(), "Output iterator at unexpected position.");
   }
 }
 
@@ -72,6 +76,7 @@ enum class OutputMode {
 
 template <typename T, uint8_t fan_out, size_t base_size, OutputMode output_mode>
 void sort(const std::span<T> input, const std::span<T> scratch, ThreeWayComparator<T> auto comparator) {
+  // Otherwise, we recurse indefinitely.
   static_assert(fan_out >= 2);
 
   if (input.size() <= base_size) {
@@ -88,6 +93,8 @@ void sort(const std::span<T> input, const std::span<T> scratch, ThreeWayComparat
   }
 
   const auto sublist_size = input.size() / fan_out;
+  // Since input.size() > base_size >= fan_out, we get that sublist_size > 0.
+  static_assert(base_size >= fan_out);
 
   auto tasks = std::vector<std::shared_ptr<AbstractTask>>(fan_out, nullptr);
   for (auto i = 0; i < fan_out; ++i) {
