@@ -655,13 +655,14 @@ set(
     utils/print_utils.cpp
     utils/print_utils.hpp
     utils/segment_tree.hpp
-    utils/small_min_heap.hpp
     utils/settings/abstract_setting.cpp
     utils/settings/abstract_setting.hpp
     utils/settings_manager.cpp
     utils/settings_manager.hpp
     utils/singleton.hpp
     utils/size_estimation_utils.hpp
+    utils/small_min_heap.hpp
+    utils/sort_utils.hpp
     utils/sqlite_add_indices.cpp
     utils/sqlite_add_indices.hpp
     utils/sqlite_wrapper.cpp
