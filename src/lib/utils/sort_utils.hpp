@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <ranges>
 #include <span>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -15,10 +16,15 @@
 
 namespace hyrise {
 
+template <typename Comparator, typename T>
+concept ThreeWayComparator = requires(Comparator comparator, const T& lhs, const T& rhs) {
+                               { comparator(lhs, rhs) } -> std::convertible_to<std::partial_ordering>;
+                             };
+
 namespace parallel_merge_sort_impl {
 
 template <typename T, uint8_t sublist_count>
-void multiway_merge_into(const std::span<T> input, const std::span<T> output, auto comparator) {
+void multiway_merge_into(const std::span<T> input, const std::span<T> output, ThreeWayComparator<T> auto comparator) {
   const auto sublist_size = input.size() / sublist_count;
 
   DebugAssert(sublist_size > 0, "Why are you even merging?");
@@ -70,7 +76,7 @@ enum class OutputMode {
 };
 
 template <typename T, uint8_t fan_out, size_t base_size, OutputMode output_mode>
-void sort(const std::span<T> input, const std::span<T> scratch, auto comparator) {
+void sort(const std::span<T> input, const std::span<T> scratch, ThreeWayComparator<T> auto comparator) {
   static_assert(fan_out >= 2);
 
   if (input.size() <= base_size) {
@@ -114,7 +120,7 @@ void sort(const std::span<T> input, const std::span<T> scratch, auto comparator)
 }  // namespace parallel_merge_sort_impl
 
 template <typename T, uint8_t fan_out = 2, size_t base_size = 1u << 10u>
-void parallel_inplace_merge_sort(const std::span<T> data, auto comparator) {
+void parallel_inplace_merge_sort(const std::span<T> data, ThreeWayComparator<T> auto comparator) {
   using namespace parallel_merge_sort_impl;
 
   auto scratch = std::vector<T>(data.size());
