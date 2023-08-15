@@ -300,11 +300,9 @@ void multiway_inplace_merge(const std::span<T> data, const std::span<T> scratch,
   }
 }
 
-template <typename T, uint8_t fan_out>
+template <typename T, uint8_t fan_out, size_t base_size>
 void parallel_merge_sort(const std::span<T> data, const std::span<T> scratch, auto comparator) {
   static_assert(fan_out >= 2);
-
-  const auto base_size = 1u << 17u;
 
   if (data.size() <= base_size) {
     // NOTE: The "stable" is needed for tests (against sqlite) to pass, but I think that it is not actually required by
@@ -330,10 +328,10 @@ void parallel_merge_sort(const std::span<T> data, const std::span<T> scratch, au
   multiway_inplace_merge<T, fan_out>(data, scratch, comparator);
 }
 
-template <typename T, uint8_t fan_out = 2>
+template <typename T, uint8_t fan_out = 2, size_t base_size = 1u << 10u>
 void parallel_merge_sort(const std::span<T> data, auto comparator) {
   auto scratch = std::vector<T>(data.size());
-  parallel_merge_sort<T, fan_out>(data, scratch, comparator);
+  parallel_merge_sort<T, fan_out, base_size>(data, scratch, comparator);
 }
 
 };  // namespace
